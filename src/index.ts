@@ -1,147 +1,31 @@
-import { parse } from 'csv-parse';
-import fs from 'fs';
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
 import { parse as parseHtml } from 'node-html-parser';
-import puppeteer, { Browser, ElementHandle } from 'puppeteer';
 import {
+  UpdateData,
+  batchUpdateValues,
   extractSpreadsheetId,
   getUrlsFromSheet,
-  updateValues,
 } from './googleSheets.js';
 
 // TODO: MAKE THIS SAFE
-const SERVICE_ACCOUNT_EMAIL =
+const SERVICE_ACCOUNT_EMAIL = ''
 
-const SERVICE_ACCOUNT_PRIVATE_KEY = 
+const SERVICE_ACCOUNT_PRIVATE_KEY = '' 
 
-const scrapeProductData = async (
-  url: string,
-  // ): Promise<{ price: string; title: string; desc: string; img: string }> => {
-): Promise<any> => {
-  let browser: Browser;
-  try {
-    browser = await puppeteer.launch({
-      defaultViewport: null,
-      headless: false,
-      ignoreHTTPSErrors: true,
-    });
-  } catch (error) {
-    console.log(`error with browser`);
-    console.log(error);
-    throw error;
+const extractHomeDepotProductNumber = (url: string): string | null => {
+  // Define a regular expression to match the product number.
+  const regex = /\/(\d+)(?:#reviews)?$/;
+
+  // Use the regular expression to search for a match in the URL.
+  const match = url.match(regex);
+
+  // If a match is found, return the product number; otherwise, return null.
+  if (match && match[1]) {
+    return match[1];
+  } else {
+    return null;
   }
-  const page = await browser.newPage();
-  console.log('created page');
-
-  let price,
-    title,
-    desc,
-    img = '';
-
-  try {
-    console.log(url);
-    await page.goto(url, { timeout: 600000 });
-    console.log('here');
-
-    // Wait for the product information to load (adjust selectors as needed)
-    try {
-      await page.waitForSelector('[data-enzyme-id=PriceBlockijoiojijoijoioj]', {
-        timeout: 600000,
-        visible: true,
-      });
-
-      const productPriceHandle: ElementHandle<Element> | null = await page.$(
-        '[data-enzyme-id=PriceBlock]',
-      );
-
-      console.log(productPriceHandle);
-      price = productPriceHandle
-        ? await page.evaluate(
-            (element: Element) => (element.textContent ?? '').trim(),
-            productPriceHandle,
-          )
-        : '';
-
-      console.log(price);
-    } catch (error) {
-      console.log(error);
-    }
-
-    await page.screenshot({ path: 'screenshot.png' });
-    //   await page.evaluate(() => {
-    //     console.log(document.querySelectorAll('img'));
-    //   });
-
-    //   const productPriceHandle: ElementHandle<Element> | null = await page.$(
-    //     '.hdca-product__description-pricing-price--hero .hdca-product__description-pricing-price-value',
-    //   );
-    //   const productTitleHandle: ElementHandle<Element> | null = await page.$(
-    //     '.hdca-product__description-title-product-name',
-    //   );
-    //   const productDescHandle: ElementHandle<Element> | null = await page.$(
-    //     '.acl-py--x-small hdca-text-body--small',
-    //   );
-    //   const productImgHandle: ElementHandle<Element> | null = await page.$(
-    //     '.image-item.selected img',
-    //   );
-
-    //   price = productPriceHandle
-    //     ? await page.evaluate(
-    //         (element: Element) => (element.textContent ?? '').trim(),
-    //         productPriceHandle,
-    //       )
-    //     : '';
-
-    //   title = productTitleHandle
-    //     ? await page.evaluate(
-    //         (element: Element) => (element.textContent ?? '').trim(),
-    //         productTitleHandle,
-    //       )
-    //     : '';
-
-    //   desc = productDescHandle
-    //     ? await page.evaluate(
-    //         (element: Element) => (element.textContent ?? '').trim(),
-    //         productDescHandle,
-    //       )
-    //     : '';
-
-    //   img = productImgHandle
-    //     ? await page.evaluate(
-    //         (element: Element) => ((element as any)?.src ?? '').trim(),
-    //         productImgHandle,
-    //       )
-    //     : '';
-  } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await browser.close();
-  }
-  // return {
-  //   price: price ?? '',
-  //   title: title ?? '',
-  //   desc: desc ?? '',
-  //   img: img ?? '',
-  // };
-};
-
-const readCSVFile = async (filePath: string): Promise<string[]> => {
-  return new Promise((resolve, reject) => {
-    const results: string[] = [];
-
-    fs.createReadStream(filePath)
-      .pipe(parse({ delimiter: ',', from_line: 1 }))
-      .on('data', (row) => {
-        results.push(row[0]);
-      })
-      .on('end', () => {
-        resolve(results);
-      })
-      .on('error', (error) => {
-        reject(error);
-      });
-  });
 };
 
 const main = async () => {
@@ -151,6 +35,7 @@ const main = async () => {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
+  // TODO: GET THIS FROM USER INPUT SOMEHOW
   const spreadsheetUrl =
     'https://docs.google.com/spreadsheets/d/1_CnkavI1RyzclNUfMTIv2luQ50_TiQ6G73tscLTEfTQ/edit#gid=0';
   const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
@@ -161,94 +46,115 @@ const main = async () => {
     );
     return;
   }
-  await getUrlsFromSheet(auth, spreadsheetId);
 
-  const links: string[] = await readCSVFile('./sheet/list.csv');
-  let rows: any[][] = [];
+  const data: UpdateData[] = [];
 
-  for (const link of []) {
-    // for IKEA links
-    if (link.toLowerCase().includes('ikea')) {
-      const res = await fetch(link);
-      const html = await res.text();
+  const rowsAndUrls = await getUrlsFromSheet(auth, spreadsheetId);
 
-      const htmlEl = parseHtml(html);
+  for (const { rowNum, url } of rowsAndUrls) {
+    try {
+      // for IKEA links
+      if (url.toLowerCase().includes('ikea')) {
+        const res = await fetch(url);
+        const html = await res.text();
 
-      const priceIntEl = htmlEl.querySelector('.pip-temp-price__integer');
-      const priceInt = priceIntEl ? priceIntEl?.childNodes[0]?.innerText : '#';
+        const htmlEl = parseHtml(html);
 
-      const priceDecEl = htmlEl.querySelector('.pip-temp-price__decimal');
-      const priceDec = priceDecEl ? priceDecEl?.childNodes[1]?.innerText : '.#';
+        const priceIntEl = htmlEl.querySelector('.pip-temp-price__integer');
+        const priceInt = priceIntEl
+          ? priceIntEl?.childNodes[0]?.innerText
+          : '#';
 
-      const price = `${priceInt}.${priceDec}`;
+        const priceDecEl = htmlEl.querySelector('.pip-temp-price__decimal');
+        const priceDec = priceDecEl
+          ? priceDecEl?.childNodes[1]?.innerText
+          : '.#';
 
-      const titleEl = htmlEl.querySelector(
-        '.pip-header-section__title--big.notranslate',
-      );
-      const title = titleEl ? titleEl?.childNodes[0]?.innerText : '#';
+        const price = `${priceInt}.${priceDec}`;
 
-      const descEl = htmlEl.querySelector(
-        '.pip-header-section__description-text',
-      );
-      const desc = descEl ? descEl?.childNodes[0]?.innerText : '#';
+        const titleEl = htmlEl.querySelector(
+          '.pip-header-section__title--big.notranslate',
+        );
+        const title = titleEl ? titleEl?.childNodes[0]?.innerText : '#';
 
-      const imgEl = htmlEl.querySelector('.pip-image');
+        const descEl = htmlEl.querySelector(
+          '.pip-header-section__description-text',
+        );
+        const desc = descEl ? descEl?.childNodes[0]?.innerText : '#';
 
-      const imgSrc = (imgEl as any)?._attrs?.src;
+        const imgEl = htmlEl.querySelector('.pip-image');
 
-      rows.push([title, desc, price, link, `=IMAGE("${imgSrc}")`]);
-    }
-    if (link.toLowerCase().includes('homedepot')) {
-      const productNumber = link.substring(link.lastIndexOf('/') + 1);
+        const imgSrc = (imgEl as any)?._attrs?.src;
 
-      const res = await fetch(
-        `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`,
-      );
-      const resWithImage = await fetch(
-        `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`,
-      );
+        data.push({
+          range: `Sheet1!B${rowNum}:F${rowNum}`,
+          values: [
+            [
+              title ?? '',
+              `=IMAGE("${imgSrc}")`,
+              desc ?? '',
+              'IKEA',
+              price ?? '',
+            ],
+          ],
+        });
+      } else if (url.toLowerCase().includes('homedepot')) {
+        const productNumber = extractHomeDepotProductNumber(url);
 
-      const resJson: any = await res.json();
-      const resWithImageJson: any = await resWithImage.json();
+        const res = await fetch(
+          `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`,
+        );
+        const resWithImage = await fetch(
+          `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`,
+        );
 
-      const price = String(resJson?.optimizedPrice?.displayPrice?.value);
-      const title = String(resWithImageJson?.anchorArticle?.name);
-      const desc = String(resJson?.installServiceCTI?.services[0]?.description);
-      const img = String(resWithImageJson?.anchorArticle?.images[0]?.url);
+        const resJson: any = await res.json();
+        const resWithImageJson: any = await resWithImage.json();
 
-      rows.push([title, desc, price, link, `=IMAGE("${img}")`]);
-    }
-    if (link.toLowerCase().includes('amazon')) {
-      const res = await fetch(link);
-      const html = await res.text();
+        const price = String(resJson?.optimizedPrice?.displayPrice?.value);
+        const title = resWithImageJson?.anchorArticle?.name ?? '';
+        const desc = resJson?.installServiceCTI?.services[0]?.description ?? '';
+        const imgSrc = String(resWithImageJson?.anchorArticle?.images[0]?.url);
 
-      const htmlEl = parseHtml(html);
-      const priceEl = htmlEl.querySelector('.a-offscreen');
-      const price = priceEl ? priceEl.childNodes[0]?.innerText : '#';
+        data.push({
+          range: `Sheet1!B${rowNum}:F${rowNum}`,
+          values: [
+            [
+              title ?? '',
+              `=IMAGE("${imgSrc}")`,
+              desc ?? '',
+              'HOME DEPOT',
+              '' ?? price,
+            ],
+          ],
+        });
+      } else if (url.toLowerCase().includes('amazon')) {
+        const res = await fetch(url);
+        const html = await res.text();
 
-      const titleEl = htmlEl.querySelector('#productTitle');
-      const title = titleEl ? titleEl.childNodes[0]?.innerText?.trim() : '#';
+        const htmlEl = parseHtml(html);
+        const priceEl = htmlEl.querySelector('.a-offscreen');
+        const price = priceEl ? priceEl.childNodes[0]?.innerText : '#';
 
-      const imgEl = htmlEl.querySelector('#imgTagWrapperId img');
+        const titleEl = htmlEl.querySelector('#productTitle');
+        const title = titleEl ? titleEl.childNodes[0]?.innerText?.trim() : '#';
 
-      const imgSrc = (imgEl as any)?._attrs?.src;
+        const imgEl = htmlEl.querySelector('#imgTagWrapperId img');
 
-      rows.push([title, '', price, link, `=IMAGE("${imgSrc}")`]);
+        const imgSrc = (imgEl as any)?._attrs?.src;
 
-      console.log(price);
+        data.push({
+          range: `Sheet1!B${rowNum}:F${rowNum}`,
+          values: [[title, `=IMAGE("${imgSrc}")`, '', 'AMAZON', price]],
+        });
+      }
+    } catch (error) {
+      console.log(error);
     }
   }
-  try {
-    // const auth = await authorize();
-    // listMajors(auth);
 
-    updateValues(
-      '1_CnkavI1RyzclNUfMTIv2luQ50_TiQ6G73tscLTEfTQ',
-      'Sheet1',
-      'USER_ENTERED',
-      rows,
-      auth,
-    );
+  try {
+    batchUpdateValues(spreadsheetId, data, 'USER_ENTERED', auth);
   } catch (error) {
     console.error(error);
   }

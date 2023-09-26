@@ -107,6 +107,11 @@ export interface RowAndUrl {
   url: string;
 }
 
+export interface UpdateData {
+  range: string;
+  values: string[][];
+}
+
 export const getUrlsFromSheet = async (
   auth: any,
   spreadsheetId: string,
@@ -149,35 +154,6 @@ export const isValidURL = (str: string): boolean => {
   return urlPattern.test(str);
 };
 
-// export const updateValues = (
-//   spreadsheetId: string,
-//   range: string,
-//   valueInputOption: any,
-//   values: any,
-//   callback: any,
-// ) => {
-//   const body = {
-//     values,
-//   };
-//   try {
-//     google.client.sheets.spreadsheets.values
-//       .update({
-//         spreadsheetId: spreadsheetId,
-//         range: range,
-//         valueInputOption: valueInputOption,
-//         resource: body,
-//       })
-//       .then((response: any) => {
-//         const result = response.result;
-//         console.log(`${result.updatedCells} cells updated.`);
-//         if (callback) callback(response);
-//       });
-//   } catch (err: any) {
-//     console.error(err?.message ?? err);
-//     return;
-//   }
-// };
-
 export const updateValues = async (
   spreadsheetId: string,
   range: string,
@@ -194,5 +170,19 @@ export const updateValues = async (
     requestBody: {
       values,
     },
+  });
+};
+
+export const batchUpdateValues = (
+  spreadsheetId: string,
+  data: UpdateData[],
+  valueInputOption: string,
+  auth: any,
+) => {
+  const sheet = google.sheets('v4');
+  sheet.spreadsheets.values.batchUpdate({
+    auth,
+    spreadsheetId,
+    requestBody: { data: data as any, valueInputOption },
   });
 };
