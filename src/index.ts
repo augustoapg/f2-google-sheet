@@ -1,6 +1,8 @@
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
 import { parse as parseHtml } from 'node-html-parser';
+import readline from 'readline';
+import config from './config';
 import {
   UpdateData,
   batchUpdateValues,
@@ -8,10 +10,19 @@ import {
   getUrlsFromSheet,
 } from './googleSheets.js';
 
-// TODO: MAKE THIS SAFE
-const SERVICE_ACCOUNT_EMAIL = ''
+const { SERVICE_ACCOUNT_EMAIL, SERVICE_ACCOUNT_PRIVATE_KEY } = config;
 
-const SERVICE_ACCOUNT_PRIVATE_KEY = '' 
+const createLoadingBar = (width: number, progress: number): string => {
+  const progressBar =
+    '[' + '='.repeat(progress) + ' '.repeat(width - progress) + ']';
+  return progressBar;
+};
+
+const updateLoadingBar = (loadingBar: string, progress: number): void => {
+  process.stdout.clearLine(0); // Clear the console line
+  process.stdout.cursorTo(0); // Move the cursor to the beginning of the line
+  process.stdout.write(loadingBar); // Write the updated loading bar
+};
 
 const extractHomeDepotProductNumber = (url: string): string | null => {
   // Define a regular expression to match the product number.
@@ -28,16 +39,36 @@ const extractHomeDepotProductNumber = (url: string): string | null => {
   }
 };
 
+const getUserInput = async (question: string) => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  // Create a Promise to wait for user input
+  return new Promise<string>((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+};
+
 const main = async () => {
+  const spreadsheetUrl = await getUserInput('Enter spreadsheet url: ');
+  const column = await getUserInput(
+    'Enter column where links are (example: H): ',
+  );
+  const sheetName = await getUserInput(
+    'Enter sheet name (leave it blank for Sheet1): ',
+  );
+
   const auth = new google.auth.JWT({
     email: SERVICE_ACCOUNT_EMAIL,
     key: SERVICE_ACCOUNT_PRIVATE_KEY,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
-  // TODO: GET THIS FROM USER INPUT SOMEHOW
-  const spreadsheetUrl =
-    'https://docs.google.com/spreadsheets/d/1_CnkavI1RyzclNUfMTIv2luQ50_TiQ6G73tscLTEfTQ/edit#gid=0';
   const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
 
   if (spreadsheetId === null) {
@@ -49,7 +80,15 @@ const main = async () => {
 
   const data: UpdateData[] = [];
 
-  const rowsAndUrls = await getUrlsFromSheet(auth, spreadsheetId);
+  const rowsAndUrls = await getUrlsFromSheet(
+    auth,
+    spreadsheetId,
+    column,
+    sheetName,
+  );
+
+  const totalSteps = rowsAndUrls.length;
+  let currentStep = 0;
 
   for (const { rowNum, url } of rowsAndUrls) {
     try {
@@ -124,7 +163,7 @@ const main = async () => {
               `=IMAGE("${imgSrc}")`,
               desc ?? '',
               'HOME DEPOT',
-              '' ?? price,
+              price ?? '',
             ],
           ],
         });
@@ -148,6 +187,9 @@ const main = async () => {
           values: [[title, `=IMAGE("${imgSrc}")`, '', 'AMAZON', price]],
         });
       }
+      currentStep++;
+      const loadingBar = createLoadingBar(50, (currentStep / totalSteps) * 50);
+      updateLoadingBar(loadingBar, (currentStep / totalSteps) * 30);
     } catch (error) {
       console.log(error);
     }

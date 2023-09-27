@@ -115,11 +115,13 @@ export interface UpdateData {
 export const getUrlsFromSheet = async (
   auth: any,
   spreadsheetId: string,
+  column: string,
+  sheetName: string = 'Sheet1',
 ): Promise<RowAndUrl[]> => {
   const sheets = google.sheets({ version: 'v4', auth });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: 'Sheet1!H:H',
+    range: `${sheetName}!${column}:${column}`,
   });
   const rows = res.data.values;
   if (!rows || rows.length === 0) {
@@ -150,7 +152,7 @@ export const extractSpreadsheetId = (url: string): string | null => {
 };
 
 export const isValidURL = (str: string): boolean => {
-  const urlPattern = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?$/;
+  const urlPattern = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?(#.*)?$/;
   return urlPattern.test(str);
 };
 
