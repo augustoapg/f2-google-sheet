@@ -170,7 +170,7 @@ Bun.serve({
     if (url.pathname === "/submit") {
       const formData = await request.formData()
       const spreadsheetUrl = formData.get('spreadsheetUrl')?.toString();
-      const sheetName = formData.get('sheetName')?.toString();
+      const sheetName = formData.get('sheetName')?.toString() || "Sheet1";
       const column = formData.get('column')?.toString();
 
       if (!spreadsheetUrl || !sheetName || !column) {
