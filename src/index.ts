@@ -1,7 +1,6 @@
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
 import { parse as parseHtml } from 'node-html-parser';
-import config from './config';
 import {
   UpdateData,
   batchUpdateValues,
@@ -9,7 +8,8 @@ import {
   getUrlsFromSheet,
 } from './googleSheets.js';
 
-const { SERVICE_ACCOUNT_EMAIL, SERVICE_ACCOUNT_PRIVATE_KEY } = config;
+const SERVICE_ACCOUNT_EMAIL = process.env.SERVICE_ACCOUNT_EMAIL;
+const SERVICE_ACCOUNT_PRIVATE_KEY = process.env.SERVICE_ACCOUNT_PRIVATE_KEY;
 
 const extractHomeDepotProductNumber = (url: string): string | null => {
   // Define a regular expression to match the product number.
@@ -165,8 +165,9 @@ Bun.serve({
   
   async fetch(request) {
     const url = new URL(request.url);
-    console.log(url.pathname)
-    if (url.pathname === "/") return new Response(Bun.file(import.meta.dir + "/public/index.html"));
+    if (url.pathname === "/") {
+      return new Response(Bun.file(import.meta.dir + "/public/index.html"));
+    }
     if (url.pathname === "/submit") {
       const formData = await request.formData()
       const spreadsheetUrl = formData.get('spreadsheetUrl')?.toString();
