@@ -1,7 +1,6 @@
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
 import { parse as parseHtml } from 'node-html-parser';
-import readline from 'readline';
 import config from './config';
 import {
   UpdateData,
@@ -11,18 +10,6 @@ import {
 } from './googleSheets.js';
 
 const { SERVICE_ACCOUNT_EMAIL, SERVICE_ACCOUNT_PRIVATE_KEY } = config;
-
-const createLoadingBar = (width: number, progress: number): string => {
-  const progressBar =
-    '[' + '='.repeat(progress) + ' '.repeat(width - progress) + ']';
-  return progressBar;
-};
-
-const updateLoadingBar = (loadingBar: string, progress: number): void => {
-  process.stdout.clearLine(0); // Clear the console line
-  process.stdout.cursorTo(0); // Move the cursor to the beginning of the line
-  process.stdout.write(loadingBar); // Write the updated loading bar
-};
 
 const extractHomeDepotProductNumber = (url: string): string | null => {
   // Define a regular expression to match the product number.
@@ -39,30 +26,7 @@ const extractHomeDepotProductNumber = (url: string): string | null => {
   }
 };
 
-const getUserInput = async (question: string) => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  // Create a Promise to wait for user input
-  return new Promise<string>((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-};
-
-const main = async () => {
-  const spreadsheetUrl = await getUserInput('Enter spreadsheet url: ');
-  const column = await getUserInput(
-    'Enter column where links are (example: H): ',
-  );
-  const sheetName = await getUserInput(
-    'Enter sheet name (leave it blank for Sheet1): ',
-  );
-
+const main = async (spreadsheetUrl: string, column: string, sheetName: string) => {
   const auth = new google.auth.JWT({
     email: SERVICE_ACCOUNT_EMAIL,
     key: SERVICE_ACCOUNT_PRIVATE_KEY,
@@ -86,9 +50,6 @@ const main = async () => {
     column,
     sheetName,
   );
-
-  const totalSteps = rowsAndUrls.length;
-  let currentStep = 0;
 
   for (const { rowNum, url } of rowsAndUrls) {
     try {
@@ -187,9 +148,6 @@ const main = async () => {
           values: [[title, `=IMAGE("${imgSrc}")`, '', 'AMAZON', price]],
         });
       }
-      currentStep++;
-      const loadingBar = createLoadingBar(50, (currentStep / totalSteps) * 50);
-      updateLoadingBar(loadingBar, (currentStep / totalSteps) * 30);
     } catch (error) {
       console.log(error);
     }
@@ -202,4 +160,31 @@ const main = async () => {
   }
 };
 
-main();
+Bun.serve({
+  port: 3000,
+  
+  async fetch(request) {
+    const url = new URL(request.url);
+    console.log(url.pathname)
+    if (url.pathname === "/") return new Response(Bun.file(import.meta.dir + "/public/index.html"));
+    if (url.pathname === "/submit") {
+      const formData = await request.formData()
+      const spreadsheetUrl = formData.get('spreadsheetUrl')?.toString();
+      const sheetName = formData.get('sheetName')?.toString();
+      const column = formData.get('column')?.toString();
+
+      if (!spreadsheetUrl || !sheetName || !column) {
+        return new Response("All values must be added. Please go back and try again.");
+      }
+
+      try {
+        await main(spreadsheetUrl, column, sheetName);
+        return new Response(`Spreadsheet should be filled now. Check in ${spreadsheetUrl} if all worked`);
+      } catch (error) {
+        console.error(error);
+        return new Response(`Script failed with the following error: ${error}`)
+      }
+    }
+    return new Response("404!");
+  },
+});

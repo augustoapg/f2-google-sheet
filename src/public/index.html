@@ -1,0 +1,21 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>F2 Shopping List</title>
+  </head>
+  <body>
+    <form action="/submit" style="display: flex; flex-direction: column; gap: 10px">
+      <input name="spreadsheetUrl" placeholder="Enter spreadsheet url" />
+      <input
+        name="sheetName"
+        placeholder="Enter sheet name (leave empty for Sheet1)"
+      />
+      <input
+        name="column"
+        placeholder="Enter column where links are (ex: H)"
+      />
+      <button type="submit" formmethod="post" formenctype="multipart/form-data">Submit</button>
+    </form>
+  </body>
+</html>
