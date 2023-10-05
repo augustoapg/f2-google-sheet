@@ -161,7 +161,7 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
 };
 
 Bun.serve({
-  port: 3000,
+  port: 8080,
   
   async fetch(request) {
     const url = new URL(request.url);
