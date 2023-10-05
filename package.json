@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "bun ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build"
+    "build": "bun build ./src/index.ts --outdir ./build --target node"
   },
   "type": "module",
   "author": "Augusto Peres (augustoapg@gmail.com)",
