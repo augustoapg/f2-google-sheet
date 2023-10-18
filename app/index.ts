@@ -1,15 +1,28 @@
+import 'dotenv/config';
+import express from 'express';
 import { google } from 'googleapis';
-import fetch from 'node-fetch';
+import axios from 'axios'; // Import axios
 import { parse as parseHtml } from 'node-html-parser';
+import path from 'path';
+import sanitizeHtml from 'sanitize-html';
+import { fileURLToPath } from 'url';
 import {
   UpdateData,
   batchUpdateValues,
   extractSpreadsheetId,
   getUrlsFromSheet,
-} from './googleSheets.js';
+} from './googleSheets';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const port = 3000;
 
 const SERVICE_ACCOUNT_EMAIL = process.env.SERVICE_ACCOUNT_EMAIL;
-const SERVICE_ACCOUNT_PRIVATE_KEY = process.env.SERVICE_ACCOUNT_PRIVATE_KEY;
+const SERVICE_ACCOUNT_PRIVATE_KEY = (process.env.SERVICE_ACCOUNT_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+
+app.use(express.urlencoded({ extended: true }));
 
 const extractHomeDepotProductNumber = (url: string): string | null => {
   // Define a regular expression to match the product number.
@@ -37,50 +50,46 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
 
   if (spreadsheetId === null) {
     console.error(
-      'could not extract spreadsheetId from this URL... make sure the format of the url is correct. It should be something like: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID_HERE/edit#gid=0',
+      'Could not extract spreadsheetId from this URL. Make sure the URL format is correct, like: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID_HERE/edit#gid=0'
     );
     return;
   }
 
   const data: UpdateData[] = [];
 
-  const rowsAndUrls = await getUrlsFromSheet(
-    auth,
-    spreadsheetId,
-    column,
-    sheetName,
-  );
+  const rowsAndUrls = await getUrlsFromSheet(auth, spreadsheetId, column, sheetName);
 
   for (const { rowNum, url } of rowsAndUrls) {
+    console.log(rowNum, url);
     try {
       // for IKEA links
       if (url.toLowerCase().includes('ikea')) {
-        const res = await fetch(url);
-        const html = await res.text();
+        const response = await axios.get(url);
+        const html = response.data;
 
         const htmlEl = parseHtml(html);
 
         const priceIntEl = htmlEl.querySelector('.pip-temp-price__integer');
         const priceInt = priceIntEl
-          ? priceIntEl?.childNodes[0]?.innerText
+          ? priceIntEl.childNodes[0]?.innerText
           : '#';
 
         const priceDecEl = htmlEl.querySelector('.pip-temp-price__decimal');
         const priceDec = priceDecEl
-          ? priceDecEl?.childNodes[1]?.innerText
+          ? priceDecEl.childNodes[1]?.innerText
           : '.#';
 
         const price = `${priceInt}.${priceDec}`;
 
         const titleEl = htmlEl.querySelector(
-          '.pip-header-section__title--big.notranslate',
+          '.pip-header-section__title--big.notranslate'
         );
-        const title = titleEl ? titleEl?.childNodes[0]?.innerText : '#';
+        const title = titleEl ? titleEl.childNodes[0]?.innerText : '#';
 
         const descEl = htmlEl.querySelector(
-          '.pip-header-section__description-text',
+          '.pip-header-section__description-text'
         );
-        const desc = descEl ? descEl?.childNodes[0]?.innerText : '#';
+        const desc = descEl ? descEl.childNodes[0]?.innerText : '#';
 
         const imgEl = htmlEl.querySelector('.pip-image');
 
@@ -100,16 +109,23 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
         });
       } else if (url.toLowerCase().includes('homedepot')) {
         const productNumber = extractHomeDepotProductNumber(url);
+        if (!productNumber) continue;
 
-        const res = await fetch(
-          `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`,
+        const headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+      }
+
+        const res = await axios.get(
+          `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`, {headers}
         );
-        const resWithImage = await fetch(
-          `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`,
+        const resWithImage = await axios.get(
+          `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`, {headers}
         );
 
-        const resJson: any = await res.json();
-        const resWithImageJson: any = await resWithImage.json();
+        const resJson = res.data;
+        const resWithImageJson = resWithImage.data;
 
         const price = String(resJson?.optimizedPrice?.displayPrice?.value);
         const title = resWithImageJson?.anchorArticle?.name ?? '';
@@ -129,8 +145,8 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
           ],
         });
       } else if (url.toLowerCase().includes('amazon')) {
-        const res = await fetch(url);
-        const html = await res.text();
+        const response = await axios.get(url);
+        const html = response.data;
 
         const htmlEl = parseHtml(html);
         const priceEl = htmlEl.querySelector('.a-offscreen');
@@ -149,7 +165,7 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
         });
       }
     } catch (error) {
-      console.log(error);
+      console.log((error as any)?.message || error);
     }
   }
 
@@ -160,32 +176,37 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
   }
 };
 
-Bun.serve({
-  port: 8080,
-  
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === "/") {
-      return new Response(Bun.file(import.meta.dir + "/public/index.html"));
-    }
-    if (url.pathname === "/submit") {
-      const formData = await request.formData()
-      const spreadsheetUrl = formData.get('spreadsheetUrl')?.toString();
-      const sheetName = formData.get('sheetName')?.toString() || "Sheet1";
-      const column = formData.get('column')?.toString();
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
 
-      if (!spreadsheetUrl || !sheetName || !column) {
-        return new Response("All values must be added. Please go back and try again.");
-      }
+app.post('/submit', async (req, res) => {
+  const spreadsheetUrl = sanitizeHtml(
+    req.body.spreadsheetUrl || '',
+    { allowedTags: [], allowedAttributes: {} }
+  );
+  const sheetName = sanitizeHtml(
+    req.body.sheetName || 'Sheet1',
+    { allowedTags: [], allowedAttributes: {} }
+  );
+  const column = sanitizeHtml(
+    req.body.column || '',
+    { allowedTags: [], allowedAttributes: {} }
+  );
 
-      try {
-        await main(spreadsheetUrl, column, sheetName);
-        return new Response(`Spreadsheet should be filled now. Check in ${spreadsheetUrl} if all worked`);
-      } catch (error) {
-        console.error(error);
-        return new Response(`Script failed with the following error: ${error}`)
-      }
-    }
-    return new Response("404!");
-  },
+  if (!spreadsheetUrl || !sheetName || !column) {
+    return res.send("All values must be added. Please go back and try again.");
+  }
+
+  try {
+    await main(spreadsheetUrl, column, sheetName);
+    return res.send(`Spreadsheet should be filled now. Check in ${spreadsheetUrl} if all worked`);
+  } catch (error) {
+    console.error(error);
+    return res.send(`Script failed with the following error: ${error}`);
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
