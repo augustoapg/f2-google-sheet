@@ -7,8 +7,8 @@
   - Set Editor into the Dropdown
   - Click Send
 - Links should be all in the same column in the Spreadsheet
-- Double click `shopping-list-filler` and then click on `OK` on the popup
-- It will ask for the spreadhseet url. Copy the URL from the Google Sheet, paste it and press enter
-- Next, enter in which column the links are and press enter
-- Next, enter the name of the Sheet (tab within the spreadsheet). Leave it empty if the name is Sheet1. Press enter.
+- Navigate to https://f2-shopping-list.fly.dev/
+- It will ask for the spreadhseet url. Copy the URL from the Google Sheet and paste it into the input
+- Next, enter the name of the Sheet (tab within the spreadsheet). Leave it empty if the name is Sheet1
+- Next, enter in which column the links are
 - Wait for it to complete, and the results should be in the columns B-F in the Spreadsheet

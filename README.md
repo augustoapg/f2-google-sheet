@@ -15,7 +15,13 @@ User can input where in the spreadsheet the list of urls is (which column), but 
 test-service-account@test-212916.iam.gserviceaccount.com
 ```
 
-- Add a `config.ts` file with the `SERVICE_ACCOUNT_EMAIL` and `SERVICE_ACCOUNT_PRIVATE_KEY` (retrieved from Google API service account).
-- Build the project with `bun run build`
-- Run the built project with `./shopping-list-filler`
-- 
+- Add a `.env` file with the `SERVICE_ACCOUNT_EMAIL` and `SERVICE_ACCOUNT_PRIVATE_KEY` (retrieved from Google API service account).
+- Build the project with `npm run dev`
+
+## How to deploy
+App is deployed in fly.io
+- app: https://f2-shopping-list.fly.dev/
+- dashboard: https://fly.io/apps/f2-shopping-list
+
+- To deploy, simply run `fly deploy`
+- To setup secrets (necessary for build to work), run `fly secrets set SERVICE_ACCOUNT_EMAIL=[secret_value]` and `fly secrets set SERVICE_ACCOUNT_PRIVATE_KEY="[secret_value]"`. For multiline, use double quotes with `\n` for new lines.
