@@ -113,15 +113,16 @@ const main = async (spreadsheetUrl: string, column: string, sheetName: string) =
 
         const headers = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'Accept': 'application/json',
           'Accept-Encoding': 'gzip, deflate, br',
-      }
+        }
 
         const res = await axios.get(
-          `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`, {headers}
+          `https://www.homedepot.ca/api/productsvc/v1/products/${productNumber}/store/7142?fields=BASIC_SPA&lang=en`, { headers, timeout: 2000 }
         );
+
         const resWithImage = await axios.get(
-          `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`, {headers}
+          `https://www.homedepot.ca/api/fbtsvc/v1/fbt/products/${productNumber}/store/7142?checkStockAndPrice=true&lang=en`, { headers, timeout: 2000 }
         );
 
         const resJson = res.data;
